@@ -1,0 +1,109 @@
+# Airflow (LocalExecutor) + warehouse PostgreSQL + Grafana.
+# Start:  cp .env.example .env  &&  docker compose up -d --build
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: docker/airflow/Dockerfile
+  user: "${AIRFLOW_UID:-50000}:0"
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+    # --- project settings read by food_prices.config ---
+    WAREHOUSE_URL: postgresql+psycopg2://${WH_USER}:${WH_PASSWORD}@warehouse-db:5432/${WH_DB}
+    DATA_DIR: /opt/airflow/data
+    REFERENCE_DIR: /opt/airflow/reference
+    SQL_DIR: /opt/airflow/sql
+    INFLATION_SCALE: ${INFLATION_SCALE:-1}
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./data:/opt/airflow/data
+    - ./reference:/opt/airflow/reference:ro
+    - ./sql:/opt/airflow/sql:ro
+    - ./logs:/opt/airflow/logs
+  depends_on:
+    airflow-db:
+      condition: service_healthy
+    warehouse-db:
+      condition: service_healthy
+
+services:
+  airflow-db:                       # Airflow's own metadata DB (NOT the warehouse)
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes: [airflow_db_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 10
+
+  warehouse-db:                     # the analytical warehouse; sql/*.sql runs on first start
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${WH_USER}
+      POSTGRES_PASSWORD: ${WH_PASSWORD}
+      POSTGRES_DB: ${WH_DB}
+    ports: ["5433:5432"]
+    volumes:
+      - wh_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${WH_USER} -d ${WH_DB}"]
+      interval: 5s
+      retries: 10
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/data/landing/archive /opt/airflow/data/staging
+        airflow db migrate &&
+        airflow users create --username "${AIRFLOW_ADMIN_USER}" --password "${AIRFLOW_ADMIN_PASSWORD}" \
+          --firstname Admin --lastname User --role Admin --email admin@example.com || true
+    environment:
+      <<: *airflow-env
+      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports: ["8080:8080"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      WH_USER: ${WH_USER}
+      WH_PASSWORD: ${WH_PASSWORD}
+      WH_DB: ${WH_DB}
+    ports: ["3000:3000"]
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      warehouse-db:
+        condition: service_healthy
+
+volumes:
+  airflow_db_data:
+  wh_data:
+  grafana_data:

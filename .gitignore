@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.env
+logs/
+# data is never committed; the folders are kept with .gitkeep
+data/landing/*
+data/staging/*
+!data/landing/.gitkeep
+!data/landing/archive/
+data/landing/archive/*
+!data/landing/archive/.gitkeep
+!data/staging/.gitkeep
+docs/source/*
+!docs/source/.gitkeep

@@ -1,0 +1,257 @@
+{
+  "uid": "food-prices-kenya",
+  "title": "Kenya Food Prices & Inflation",
+  "tags": [
+    "food-prices"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "",
+  "time": {
+    "from": "now-24M",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "product",
+        "label": "Product",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "warehouse"
+        },
+        "query": "SELECT product_code FROM core.dim_product WHERE measure_type = 'price' ORDER BY 1",
+        "definition": "SELECT product_code FROM core.dim_product WHERE measure_type = 'price' ORDER BY 1",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "About these numbers",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Values are **model-based estimates** from the World Bank Real-Time Prices (RTFP) dataset, not observed prices. Rows flagged as spatially interpolated are less reliable. County values are **unweighted means of market values**. Source: https://microdata.worldbank.org/catalog/6167 - check the dataset's terms of use for citation requirements."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Q1: Maize price, last 24 months",
+      "type": "timeseries",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 16,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_key::timestamp AS time, avg_close AS \"Maize (avg close)\"\nFROM mart.national_month\nWHERE product_code = 'maize_fao'\n  AND date_key >= (SELECT max(date_key) - interval '24 months' FROM mart.national_month)\nORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Data freshness",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 3,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT source_version AS \"Release\", loaded_at AS \"Loaded at\", loaded_rows AS \"Rows\",\n       validation_status AS \"Validation\"\nFROM metadata.lineage ORDER BY loaded_at DESC LIMIT 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Q2: Food price index inflation by county (latest month)",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT county_name AS \"County\", round(avg_inflation_pct::numeric, 2) AS \"Food price index inflation\",\n       round(avg_yoy_calc_pct::numeric, 2) AS \"YoY (calculated)\", n_markets AS \"Markets\"\nFROM mart.county_month\nWHERE product_code = 'food_price_index'\n  AND date_key = (SELECT max(date_key) FROM mart.county_month)\nORDER BY avg_inflation_pct DESC NULLS LAST"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Q3: ${product} - average close by county (latest month)",
+      "type": "barchart",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT county_name AS \"County\", round(avg_close::numeric, 2) AS \"Avg close\"\nFROM mart.county_month\nWHERE product_code = '${product}'\n  AND date_key = (SELECT max(date_key) FROM mart.county_month)\nORDER BY avg_close DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "County",
+        "legend": {
+          "showLegend": false
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Q4: Reliability by county (latest month)",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT county_name AS \"County\", round(share_interpolated::numeric, 2) AS \"Share interpolated\",\n       round(avg_trust::numeric, 3) AS \"Avg trust\", n_markets AS \"Markets\"\nFROM mart.county_month\nWHERE product_code = 'food_price_index'\n  AND date_key = (SELECT max(date_key) FROM mart.county_month)\nORDER BY share_interpolated DESC NULLS LAST"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Q5: Markets with thinnest recent coverage",
+      "type": "table",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "warehouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "warehouse"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT market_name AS \"Market\", county_name AS \"County\", n_months AS \"Months\",\n       last_month AS \"Last month\", round(data_coverage_recent::numeric, 2) AS \"Recent coverage\",\n       round(share_interpolated::numeric, 2) AS \"Share interpolated\"\nFROM mart.market_coverage\nORDER BY data_coverage_recent ASC NULLS FIRST\nLIMIT 50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}
