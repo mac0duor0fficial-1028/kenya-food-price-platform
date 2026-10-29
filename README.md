@@ -69,5 +69,3 @@ TEST_WAREHOUSE_URL=postgresql+psycopg2://user:pw@localhost:5432/testdb uv run py
 - Units and the exact inflation definition must be confirmed from the dataset documentation (see `docs/source_profile.md`).
 - Automatic download is not implemented: access conditions are unconfirmed, so ingestion is a file drop into `data/landing/`.
 - Grafana provisioning and the Docker build were not run in the authoring environment; everything else is covered by tests.
-
-Code: MIT. Data: see the World Bank terms of use.
